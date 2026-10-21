@@ -28,11 +28,11 @@
     IDENTIFY: 1,
     IDENTIFIED: 2,
     REIDENTIFY: 3,
-    EVENT: 4,
-    REQUEST: 5,
-    REQUEST_RESPONSE: 6,
-    REQUEST_BATCH: 7,
-    REQUEST_BATCH_RESPONSE: 8,
+    EVENT: 5,
+    REQUEST: 6,
+    REQUEST_RESPONSE: 7,
+    REQUEST_BATCH: 8,
+    REQUEST_BATCH_RESPONSE: 9,
   });
 
   // Подсказка человеку, когда OBS не отвечает: путь в меню OBS.
@@ -161,7 +161,7 @@
     };
   }
 
-  /** Собрать запрос BroadcastCustomEvent (op 5, Request). */
+  /** Собрать запрос BroadcastCustomEvent (op 6, Request). */
   function broadcastRequest(data, requestId) {
     return {
       op: OP.REQUEST,

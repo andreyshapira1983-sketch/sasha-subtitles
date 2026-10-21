@@ -154,7 +154,7 @@ test("obs.js: BroadcastCustomEvent собирается по протоколу 
     "req-1"
   );
   assert.deepEqual(request, {
-    op: 5,
+    op: 6,
     d: {
       requestType: "BroadcastCustomEvent",
       requestId: "req-1",
@@ -182,7 +182,7 @@ test("obs.js: CustomEvent разбирается обратно в реплик�
     final: true,
   });
   const message = {
-    op: 4,
+    op: 5,
     d: {
       eventType: "CustomEvent",
       eventData: { eventType: "sasha-subtitles", eventData: payload },
@@ -193,17 +193,17 @@ test("obs.js: CustomEvent разбирается обратно в реплик�
 
 test("obs.js: чужие события и мусор не считаются нашими", () => {
   const base = {
-    op: 4,
+    op: 5,
     d: {
       eventType: "CustomEvent",
       eventData: { eventType: "sasha-subtitles", eventData: { app: "sasha-subtitles", text: "x" } },
     },
   };
-  assert.equal(Obs.parseCustomEvent({ op: 5, d: base.d }), null);
-  assert.equal(Obs.parseCustomEvent({ op: 4, d: { eventType: "Other" } }), null);
+  assert.equal(Obs.parseCustomEvent({ op: 6, d: base.d }), null);
+  assert.equal(Obs.parseCustomEvent({ op: 5, d: { eventType: "Other" } }), null);
   assert.equal(
     Obs.parseCustomEvent({
-      op: 4,
+      op: 5,
       d: {
         eventType: "CustomEvent",
         eventData: { eventType: "sasha-subtitles", eventData: { app: "другая" } },
@@ -354,7 +354,7 @@ test("obs.js: клиент отправляет реплику запросом 
 
   assert.equal(setup.client.sendPayload({ text: "привет", final: true }), true);
   const request = ws.lastSent();
-  assert.equal(request.op, 5);
+  assert.equal(request.op, 6);
   assert.equal(request.d.requestType, "BroadcastCustomEvent");
   assert.match(request.d.requestId, /^sasha-1-/);
   assert.equal(request.d.requestData.eventType, "sasha-subtitles");
@@ -387,14 +387,14 @@ test("obs.js: наши CustomEvent доходят до страницы, чуж�
 
   const payload = Obs.buildBroadcastPayload({ text: "привет", final: true });
   ws.receive({
-    op: 4,
+    op: 5,
     d: {
       eventType: "CustomEvent",
       eventData: { eventType: "sasha-subtitles", eventData: payload },
     },
   });
   ws.receive({
-    op: 4,
+    op: 5,
     d: {
       eventType: "CustomEvent",
       eventData: { eventType: "sasha-subtitles", eventData: { app: "чужая" } },
@@ -468,7 +468,7 @@ test("obs.js: ошибка запроса от OBS попадает в onError",
     return ws.lastSent();
   });
   ws.receive({
-    op: 6,
+    op: 7,
     d: {
       requestType: "BroadcastCustomEvent",
       requestId: "sasha-1-1000",
@@ -477,4 +477,19 @@ test("obs.js: ошибка запроса от OBS попадает в onError",
   });
   assert.equal(setup.errors.length, 1);
   assert.match(setup.errors[0], /нет прав/);
+});
+
+// Якорь: числа кодов операций — из документации протокола obs-websocket v5
+// (WebSocketOpCode). Раньше здесь стояли 4/5/6 и тесты проверяли код его же
+// числами — с настоящим OBS субтитры не доходили.
+test("obs.js: коды операций совпадают с протоколом obs-websocket v5", () => {
+  assert.equal(Obs.OP.HELLO, 0);
+  assert.equal(Obs.OP.IDENTIFY, 1);
+  assert.equal(Obs.OP.IDENTIFIED, 2);
+  assert.equal(Obs.OP.REIDENTIFY, 3);
+  assert.equal(Obs.OP.EVENT, 5);
+  assert.equal(Obs.OP.REQUEST, 6);
+  assert.equal(Obs.OP.REQUEST_RESPONSE, 7);
+  assert.equal(Obs.OP.REQUEST_BATCH, 8);
+  assert.equal(Obs.OP.REQUEST_BATCH_RESPONSE, 9);
 });

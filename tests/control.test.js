@@ -210,7 +210,7 @@ function broadcasts(socket) {
   return socket.sentParsed.filter(function (message) {
     return (
       message &&
-      message.op === 5 &&
+      message.op === 6 &&
       message.d &&
       message.d.requestType === "BroadcastCustomEvent"
     );

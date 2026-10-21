@@ -268,7 +268,7 @@ test("чужое событие, пустой текст и «э:» игнори
 
   // Чужой app отсекает и SS.Obs.parseCustomEvent — до оверлея не доходит.
   const foreign = SS.Obs.parseCustomEvent({
-    op: 4,
+    op: 5,
     d: {
       eventType: "CustomEvent",
       eventData: {

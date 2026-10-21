@@ -252,7 +252,7 @@ class BroadcastRequestTest(unittest.TestCase):
             "sasha-1-123",
         )
         self.assertEqual(request, {
-            "op": 5,
+            "op": 6,
             "d": {
                 "requestType": "BroadcastCustomEvent",
                 "requestId": "sasha-1-123",
@@ -502,7 +502,7 @@ class SendCustomEventTest(unittest.TestCase):
         protocol = sent_protocol_messages(sock)
         self.assertEqual(len(protocol), 2)  # Identify и BroadcastCustomEvent.
         request = protocol[-1]
-        self.assertEqual(request["op"], 5)
+        self.assertEqual(request["op"], 6)
         self.assertEqual(request["d"]["requestType"], "BroadcastCustomEvent")
         self.assertEqual(request["d"]["requestId"], request_id)
         self.assertEqual(request["d"]["requestData"], {
@@ -542,7 +542,7 @@ class SendCustomEventTest(unittest.TestCase):
         request_id = client.send_custom_event({"text": "долетело"})
         self.assertTrue(request_id.startswith("sasha-"))
         protocol = sent_protocol_messages(fresh)
-        self.assertEqual(protocol[-1]["op"], 5)
+        self.assertEqual(protocol[-1]["op"], 6)
         self.assertEqual(
             protocol[-1]["d"]["requestData"]["eventData"]["text"], "долетело",
         )
