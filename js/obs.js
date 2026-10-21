@@ -168,9 +168,13 @@
       d: {
         requestType: BROADCAST_REQUEST,
         requestId: String(requestId),
+        // OBS пересылает подписчикам только requestData.eventData —
+        // метка eventType должна лежать внутри него, иначе overlay её не увидит.
         requestData: {
-          eventType: EVENT_TYPE,
-          eventData: buildBroadcastPayload(data),
+          eventData: {
+            eventType: EVENT_TYPE,
+            eventData: buildBroadcastPayload(data),
+          },
         },
       },
     };

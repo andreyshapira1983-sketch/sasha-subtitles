@@ -221,7 +221,7 @@ function broadcasts(socket) {
 function lastPayload(socket) {
   const list = broadcasts(socket);
   if (list.length === 0) return null;
-  return list[list.length - 1].d.requestData.eventData;
+  return list[list.length - 1].d.requestData.eventData.eventData;
 }
 
 /** Включить контроллер и дождаться связи с поддельным OBS. */

@@ -183,15 +183,19 @@ def build_broadcast_payload(payload):
 
 
 def build_broadcast_request(payload, request_id):
-    """Собирает запрос BroadcastCustomEvent (op 5, Request) как js/obs.js."""
+    """Собирает запрос BroadcastCustomEvent (op 6, Request) как js/obs.js."""
+    # OBS пересылает подписчикам только requestData.eventData — метка
+    # eventType должна лежать внутри него, иначе overlay её не увидит.
     return {
         "op": OP_REQUEST,
         "d": {
             "requestType": BROADCAST_REQUEST,
             "requestId": str(request_id),
             "requestData": {
-                "eventType": EVENT_TYPE,
-                "eventData": build_broadcast_payload(payload),
+                "eventData": {
+                    "eventType": EVENT_TYPE,
+                    "eventData": build_broadcast_payload(payload),
+                },
             },
         },
     }

@@ -257,14 +257,16 @@ class BroadcastRequestTest(unittest.TestCase):
                 "requestType": "BroadcastCustomEvent",
                 "requestId": "sasha-1-123",
                 "requestData": {
-                    "eventType": "sasha-subtitles",
                     "eventData": {
-                        "app": "sasha-subtitles",
-                        "speaker": "sasha",
-                        "name": "Саша",
-                        "color": "#ff9ee6",
-                        "text": "Привет",
-                        "final": True,
+                        "eventType": "sasha-subtitles",
+                        "eventData": {
+                            "app": "sasha-subtitles",
+                            "speaker": "sasha",
+                            "name": "Саша",
+                            "color": "#ff9ee6",
+                            "text": "Привет",
+                            "final": True,
+                        },
                     },
                 },
             },
@@ -272,7 +274,7 @@ class BroadcastRequestTest(unittest.TestCase):
 
     def test_broadcast_defaults(self):
         """Пустая реплика получает значения по умолчанию, как в js/obs.js."""
-        event_data = obs_ws.build_broadcast_request({}, 7)["d"]["requestData"]["eventData"]
+        event_data = obs_ws.build_broadcast_request({}, 7)["d"]["requestData"]["eventData"]["eventData"]
         self.assertEqual(event_data, {
             "app": "sasha-subtitles",
             "speaker": "host",
@@ -286,7 +288,7 @@ class BroadcastRequestTest(unittest.TestCase):
     def test_broadcast_final_false(self):
         """Промежуточный текст с final=False сохраняется как есть."""
         request = obs_ws.build_broadcast_request({"text": "живой", "final": False}, "id")
-        self.assertFalse(request["d"]["requestData"]["eventData"]["final"])
+        self.assertFalse(request["d"]["requestData"]["eventData"]["eventData"]["final"])
 
 
 class FrameTest(unittest.TestCase):
@@ -505,7 +507,7 @@ class SendCustomEventTest(unittest.TestCase):
         self.assertEqual(request["op"], 6)
         self.assertEqual(request["d"]["requestType"], "BroadcastCustomEvent")
         self.assertEqual(request["d"]["requestId"], request_id)
-        self.assertEqual(request["d"]["requestData"], {
+        self.assertEqual(request["d"]["requestData"], {"eventData": {
             "eventType": "sasha-subtitles",
             "eventData": {
                 "app": "sasha-subtitles",
@@ -515,7 +517,7 @@ class SendCustomEventTest(unittest.TestCase):
                 "text": "Привет",
                 "final": True,
             },
-        })
+        }})
 
     def test_send_without_connection_raises(self):
         """Без connect() отправка невозможна — понятная ошибка."""
@@ -544,7 +546,7 @@ class SendCustomEventTest(unittest.TestCase):
         protocol = sent_protocol_messages(fresh)
         self.assertEqual(protocol[-1]["op"], 6)
         self.assertEqual(
-            protocol[-1]["d"]["requestData"]["eventData"]["text"], "долетело",
+            protocol[-1]["d"]["requestData"]["eventData"]["eventData"]["text"], "долетело",
         )
 
 

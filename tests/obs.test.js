@@ -159,14 +159,16 @@ test("obs.js: BroadcastCustomEvent собирается по протоколу 
       requestType: "BroadcastCustomEvent",
       requestId: "req-1",
       requestData: {
-        eventType: "sasha-subtitles",
         eventData: {
-          app: "sasha-subtitles",
-          speaker: "host",
-          name: "Ведущий",
-          color: "#8fd8ff",
-          text: "привет",
-          final: true,
+          eventType: "sasha-subtitles",
+          eventData: {
+            app: "sasha-subtitles",
+            speaker: "host",
+            name: "Ведущий",
+            color: "#8fd8ff",
+            text: "привет",
+            final: true,
+          },
         },
       },
     },
@@ -357,10 +359,10 @@ test("obs.js: клиент отправляет реплику запросом 
   assert.equal(request.op, 6);
   assert.equal(request.d.requestType, "BroadcastCustomEvent");
   assert.match(request.d.requestId, /^sasha-1-/);
-  assert.equal(request.d.requestData.eventType, "sasha-subtitles");
-  assert.equal(request.d.requestData.eventData.app, "sasha-subtitles");
-  assert.equal(request.d.requestData.eventData.text, "привет");
-  assert.equal(request.d.requestData.eventData.final, true);
+  assert.equal(request.d.requestData.eventData.eventType, "sasha-subtitles");
+  assert.equal(request.d.requestData.eventData.eventData.app, "sasha-subtitles");
+  assert.equal(request.d.requestData.eventData.eventData.text, "привет");
+  assert.equal(request.d.requestData.eventData.eventData.final, true);
 
   setup.client.sendPayload({ text: "второй" });
   assert.match(ws.lastSent().d.requestId, /^sasha-2-/);
