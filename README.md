@@ -4,6 +4,8 @@
 
 Лицензия MIT. Автор — Sasha AI.
 
+> **Новое — [STTTS](https://github.com/andreyshapira1983-sketch/sasha-sttts):** те же субтитры плюс чужой голос вместо вашего и чат Twitch голосами — всё в одном пульте. Пульт: https://andreyshapira1983-sketch.github.io/sasha-sttts/
+
 ## Три шага
 
 1. **Включите WebSocket в OBS.** OBS 28 и новее уже умеет это сам: `Сервис → Настройки WebSocket-сервера → Включить`, задайте пароль (или оставьте пустым). Запомните порт — по умолчанию `4455`.
