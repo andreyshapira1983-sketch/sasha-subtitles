@@ -119,7 +119,8 @@
       mode: parsed.mode,
       wsUrl: parsed.wsUrl,
       password: parsed.password,
-      config: parsed.config
+      config: parsed.config,
+      showInterim: SS.Overlay.wantsLive(window.location)
     });
     window.__SASHA_OVERLAY__ = overlay;
     overlay.start();

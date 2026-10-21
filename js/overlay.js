@@ -105,11 +105,23 @@
     return { mode: "hint", wsUrl: null, password: "", config: null };
   }
 
+  /** Показывать ли промежуточный текст: только если в адресе есть ?live=1. */
+  function wantsLive(location) {
+    const loc = location && typeof location === "object" ? location : {};
+    let search = textOr(loc.search, "");
+    if (!search) {
+      const href = textOr(loc.href, "").split("#")[0];
+      const index = href.indexOf("?");
+      search = index >= 0 ? href.slice(index) : "";
+    }
+    return /[?&]live=(1|true|да)(&|$)/i.test(search);
+  }
+
   /**
    * Создать оверлей страницы.
    *
    * doc — документ (в браузере document), win — окно (в браузере window).
-   * options: mode, wsUrl, password, config, roots, columns, maxLines,
+   * options: mode, wsUrl, password, config, showInterim, roots, columns, maxLines,
    *          secondsPerChar, minSeconds, maxSeconds, fontSize,
    *          setTimeout, clearTimeout (по умолчанию win.setTimeout/clearTimeout),
    *          fetch (по умолчанию win.fetch), createClient (для тестов),
@@ -312,8 +324,8 @@
      * Принять реплику: {app, speaker, name, color, text, final}.
      *
      * Готовая фраза режется на экраны и встаёт в очередь. Промежуточный
-     * текст (final:false) в очереди не копится и показывается, только пока
-     * на экране и в очереди нет готовых фраз.
+     * текст (final:false) показывается, только если включён showInterim
+     * (?live=1 в адресе), в очереди не копится и не перебивает готовые фразы.
      * Чужие события, пустой текст и команды «э:» игнорируются.
      */
     function push(payload) {
@@ -344,6 +356,8 @@
       }
 
       if (!final) {
+        // По умолчанию зрители видят только готовые фразы: бегущий текст отвлекает.
+        if (settings.showInterim !== true) return 0;
         // Готовую фразу живой текст не перебивает: иначе её не успеть прочитать.
         if ((currentPage !== null && currentPage.final !== false) || queue.length > 0) return 0;
         // Поверх другого живого текста — сразу заменяем то, что на экране.
@@ -583,6 +597,7 @@
     DEFAULT_NAME: DEFAULT_NAME,
     DEFAULT_COLOR: DEFAULT_COLOR,
     parseLocation: parseLocation,
+    wantsLive: wantsLive,
     createOverlay: createOverlay,
   };
 })(typeof window !== "undefined" ? window : globalThis);

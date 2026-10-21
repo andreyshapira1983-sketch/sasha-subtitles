@@ -225,8 +225,29 @@ test("показ: плавное исчезновение, затем следу
   assert.ok(created.stage.classList.contains("show"));
 });
 
-test("промежуточный текст не перебивает готовую фразу", () => {
+test("по умолчанию промежуточный текст не показывается", () => {
   const created = makeOverlay();
+  assert.equal(created.overlay.push({ text: "живой текст", final: false }), 0);
+  assert.equal(created.overlay.current(), null);
+  created.overlay.push({ text: "готовая фраза", final: true });
+  assert.equal(created.overlay.current().text, "готовая фраза");
+});
+
+test("wantsLive: живой текст только по ?live=1", () => {
+  assert.equal(SS.Overlay.wantsLive({ search: "", hash: "#ws://127.0.0.1:4455|п" }), false);
+  assert.equal(SS.Overlay.wantsLive({ search: "?live=1" }), true);
+  assert.equal(SS.Overlay.wantsLive({ search: "?x=2&live=true" }), true);
+  assert.equal(SS.Overlay.wantsLive({ search: "?live=0" }), false);
+  assert.equal(
+    SS.Overlay.wantsLive({ href: "https://a/overlay.html?live=1#ws://127.0.0.1:4455" }),
+    true
+  );
+  assert.equal(SS.Overlay.wantsLive({ href: "https://a/overlay.html#ws://h?live=1" }), false);
+  assert.equal(SS.Overlay.wantsLive(null), false);
+});
+
+test("промежуточный текст не перебивает готовую фразу", () => {
+  const created = makeOverlay({ showInterim: true });
   // Готовая фраза из нескольких экранов — остальные ждут в очереди.
   created.overlay.push({ text: "слово ".repeat(30), final: true });
   const waiting = created.overlay.queueLength();
@@ -241,7 +262,7 @@ test("промежуточный текст не перебивает готов
 });
 
 test("промежуточный текст: бледнее, заменяет себя и не копится в очереди", () => {
-  const created = makeOverlay();
+  const created = makeOverlay({ showInterim: true });
   created.overlay.push({ text: "живой текст", final: false });
   const page = created.overlay.current();
   assert.equal(page.text, "живой текст");
