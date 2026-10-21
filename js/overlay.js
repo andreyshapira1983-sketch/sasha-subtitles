@@ -27,9 +27,9 @@
   const DEFAULTS = Object.freeze({
     columns: 34,
     maxLines: 2,
-    secondsPerChar: 0.06,
-    minSeconds: 2.0,
-    maxSeconds: 8.0,
+    secondsPerChar: 0.1,
+    minSeconds: 3.0,
+    maxSeconds: 12.0,
     fontSize: 44,
   });
 
@@ -312,7 +312,8 @@
      * Принять реплику: {app, speaker, name, color, text, final}.
      *
      * Готовая фраза режется на экраны и встаёт в очередь. Промежуточный
-     * текст (final:false) сразу перебивает показ и в очереди не копится.
+     * текст (final:false) в очереди не копится и показывается, только пока
+     * на экране и в очереди нет готовых фраз.
      * Чужие события, пустой текст и команды «э:» игнорируются.
      */
     function push(payload) {
@@ -343,7 +344,9 @@
       }
 
       if (!final) {
-        // Живой текст не должен ждать: сразу заменяем то, что на экране.
+        // Готовую фразу живой текст не перебивает: иначе её не успеть прочитать.
+        if ((currentPage !== null && currentPage.final !== false) || queue.length > 0) return 0;
+        // Поверх другого живого текста — сразу заменяем то, что на экране.
         interrupt();
         showPage(prepared[0]);
         return 1;

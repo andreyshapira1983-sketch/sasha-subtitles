@@ -38,9 +38,9 @@ DEFAULT_CONFIG = {
     "port": 8765,
     "columns": 34,
     "max_lines": 2,
-    "seconds_per_char": 0.06,
-    "min_seconds": 2.0,
-    "max_seconds": 8.0,
+    "seconds_per_char": 0.1,
+    "min_seconds": 3.0,
+    "max_seconds": 12.0,
     "font_size": 44,
     "speakers": {
         "sasha": {"name": "Саша", "color": "#ff9ee6"},

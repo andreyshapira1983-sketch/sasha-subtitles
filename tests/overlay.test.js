@@ -180,20 +180,20 @@ test("показ: длинная фраза идёт частями послед
   assert.equal(created.overlay.current(), null);
 });
 
-test("показ: время по длине — 0,06 с/знак, но не меньше 2 с", () => {
+test("показ: время по длине — 0,1 с/знак, но не меньше 3 с", () => {
   const created = makeOverlay();
   created.overlay.push({ text: "привет" });
-  assert.equal(created.overlay.current().seconds, 2);
+  assert.equal(created.overlay.current().seconds, 3);
 
   created.overlay.reset();
-  // 34 знака: 34 * 0,06 = 2,04 с.
+  // 34 знака: 34 * 0,1 = 3,4 с.
   created.overlay.push({ text: "а".repeat(34) });
   const page = created.overlay.current();
   assert.equal(page.text.length, 34);
-  assert.ok(Math.abs(page.seconds - 2.04) < 1e-9);
+  assert.ok(Math.abs(page.seconds - 3.4) < 1e-9);
 
   // Чуть раньше срока текст ещё на экране.
-  created.clock.advance(2039);
+  created.clock.advance(3399);
   assert.ok(created.stage.classList.contains("show"));
   assert.ok(created.overlay.current());
   // Ровно в срок начинается затухание: класс show снят, но текст ещё виден.
@@ -212,8 +212,8 @@ test("показ: плавное исчезновение, затем следу
   assert.equal(created.overlay.current().text, "первая");
   assert.equal(created.overlay.queueLength(), 1);
 
-  // Время показа первой реплики (7 знаков — минимум 2 с).
-  created.clock.advance(2000);
+  // Время показа первой реплики (7 знаков — минимум 3 с).
+  created.clock.advance(3000);
   assert.ok(!created.stage.classList.contains("show"), "должно начаться затухание");
   assert.equal(created.overlay.current().text, "первая");
 
@@ -225,12 +225,23 @@ test("показ: плавное исчезновение, затем следу
   assert.ok(created.stage.classList.contains("show"));
 });
 
-test("промежуточный текст: бледнее, перебивает и не копится в очереди", () => {
+test("промежуточный текст не перебивает готовую фразу", () => {
   const created = makeOverlay();
-  // Готовая фраза из двух экранов — в очереди один ждёт.
+  // Готовая фраза из нескольких экранов — остальные ждут в очереди.
   created.overlay.push({ text: "слово ".repeat(30), final: true });
-  assert.ok(created.overlay.queueLength() >= 1);
+  const waiting = created.overlay.queueLength();
+  assert.ok(waiting >= 1);
+  const first = created.overlay.current().text;
 
+  assert.equal(created.overlay.push({ text: "живой текст", final: false }), 0);
+  assert.equal(created.overlay.current().text, first);
+  assert.equal(created.overlay.current().final, true);
+  assert.equal(created.overlay.queueLength(), waiting);
+  assert.ok(!created.stage.classList.contains("interim"));
+});
+
+test("промежуточный текст: бледнее, заменяет себя и не копится в очереди", () => {
+  const created = makeOverlay();
   created.overlay.push({ text: "живой текст", final: false });
   const page = created.overlay.current();
   assert.equal(page.text, "живой текст");
@@ -504,7 +515,7 @@ test("таймеры берутся из options.setTimeout, а не из win", 
 
   overlay.push({ text: "привет" });
   assert.equal(clock.pending(), 1);
-  clock.advance(2000);
+  clock.advance(3000);
   assert.ok(!doc.getElementById("stage").classList.contains("show"));
 });
 

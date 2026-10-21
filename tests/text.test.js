@@ -62,7 +62,7 @@ test("text.js: время показа средней реплики счита�
 });
 
 test("text.js: мусор в настройках времени заменяется значениями по умолчанию", () => {
-  assert.equal(Text.displaySeconds("а".repeat(100), "мусор", NaN, undefined), 6.0);
+  assert.equal(Text.displaySeconds("а".repeat(100), "мусор", NaN, undefined), 10.0);
 });
 
 test("text.js: мат закрывается звёздочками, первый знак остаётся", () => {
@@ -131,7 +131,7 @@ test("text.js: pagesFor закрывает мат и считает время �
   const pages = Text.pagesFor("ну и пиздец", ["пиздец"], { columns: 34, maxLines: 2 });
   assert.equal(pages.length, 1);
   assert.equal(pages[0].text, "ну и п*****");
-  assert.equal(pages[0].seconds, 2);
+  assert.equal(pages[0].seconds, 3);
 });
 
 test("text.js: pagesFor пустой реплики и «э:» — пустой список", () => {
@@ -142,5 +142,5 @@ test("text.js: pagesFor пустой реплики и «э:» — пустой 
 test("text.js: настройки по умолчанию — 34 знака и 2 строки", () => {
   assert.equal(Text.DEFAULTS.columns, 34);
   assert.equal(Text.DEFAULTS.maxLines, 2);
-  assert.equal(Text.DEFAULTS.secondsPerChar, 0.06);
+  assert.equal(Text.DEFAULTS.secondsPerChar, 0.1);
 });

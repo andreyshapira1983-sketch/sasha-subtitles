@@ -21,9 +21,9 @@
   const DEFAULTS = {
     columns: 34,
     maxLines: 2,
-    secondsPerChar: 0.06,
-    minSeconds: 2.0,
-    maxSeconds: 8.0,
+    secondsPerChar: 0.1,
+    minSeconds: 3.0,
+    maxSeconds: 12.0,
     fontSize: 44,
   };
 
@@ -117,7 +117,7 @@
 
   /**
    * Сколько секунд держать текст на экране: по длине, но в пределах
-   * minSeconds..maxSeconds (по умолчанию 2..8 секунд, 0,06 с на знак).
+   * minSeconds..maxSeconds (по умолчанию 3..12 секунд, 0,1 с на знак).
    */
   function displaySeconds(text, secondsPerChar, minSeconds, maxSeconds) {
     const perChar = _toNumber(secondsPerChar, DEFAULTS.secondsPerChar);

@@ -44,7 +44,7 @@ def paginate(text, columns, max_lines):
     return [lines[start:start + max_lines] for start in range(0, len(lines), max_lines)]
 
 
-def display_seconds(text, seconds_per_char=0.06, min_seconds=2.0, max_seconds=8.0):
+def display_seconds(text, seconds_per_char=0.1, min_seconds=3.0, max_seconds=12.0):
     """Считает время показа текста по числу знаков."""
     seconds = len(str(text).strip()) * float(seconds_per_char)
     return max(float(min_seconds), min(float(max_seconds), seconds))
