@@ -233,6 +233,21 @@
   }
 
   /**
+   * Пометить экран, после которого фраза продолжится: «…» в конце.
+   * Если экран кончается точкой, вопросом или «!», предложение и так
+   * закончено — не трогаем; запятую или тире заменяем многоточием.
+   */
+  function _markContinued(lines) {
+    const marked = lines.slice();
+    const last = marked.length - 1;
+    if (last < 0) return marked;
+    const line = marked[last];
+    if (/[.!?…]$/.test(line)) return marked;
+    marked[last] = line.replace(/[\s,;:\-—–]+$/, "") + "…";
+    return marked;
+  }
+
+  /**
    * Готовая реплика → экраны для показа.
    *
    * Каждый экран: {text, lines, seconds}. Текст уже с маскировкой мата;
@@ -245,7 +260,9 @@
     const maxLines = _toInt(options.maxLines, DEFAULTS.maxLines);
     const clean = maskRoots(normalize(text), roots);
     if (!shouldShow(clean)) return [];
-    return paginate(clean, columns, maxLines).map(function (lines) {
+    const chunks = paginate(clean, columns, maxLines);
+    return chunks.map(function (chunk, index) {
+      const lines = index < chunks.length - 1 ? _markContinued(chunk) : chunk;
       const pageText = joinLines(lines);
       return {
         text: pageText,

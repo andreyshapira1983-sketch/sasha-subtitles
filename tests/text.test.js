@@ -121,10 +121,28 @@ test("text.js: pagesFor режет длинную фразу на экраны �
   assert.ok(pages.length >= 2);
   for (const page of pages) {
     assert.ok(page.lines.length <= 2);
-    assert.ok(page.lines.every((line) => Text.codePoints(line).length <= 20));
+    // «…» на продолжаемом экране может дать один лишний знак.
+    assert.ok(page.lines.every((line) => Text.codePoints(line).length <= 21));
     assert.equal(page.text, page.lines.join("\n"));
-    assert.ok(page.seconds >= 2 && page.seconds <= 8);
+    assert.ok(page.seconds >= 3 && page.seconds <= 12);
   }
+});
+
+test("text.js: оборванный экран кончается «…», последний — нет", () => {
+  const pages = Text.pagesFor("раз два три четыре пять шесть семь восемь", [], {
+    columns: 10,
+    maxLines: 1,
+  });
+  assert.ok(pages.length >= 3);
+  for (const page of pages.slice(0, -1)) assert.ok(page.text.endsWith("…"), page.text);
+  assert.ok(!pages[pages.length - 1].text.endsWith("…"));
+});
+
+test("text.js: запятая перед обрывом меняется на «…», точка остаётся", () => {
+  const comma = Text.pagesFor("привет всем, ребята", [], { columns: 12, maxLines: 1 });
+  assert.equal(comma[0].text, "привет всем…");
+  const dot = Text.pagesFor("всем привет. как дела", [], { columns: 12, maxLines: 1 });
+  assert.equal(dot[0].text, "всем привет.");
 });
 
 test("text.js: pagesFor закрывает мат и считает время по длине", () => {

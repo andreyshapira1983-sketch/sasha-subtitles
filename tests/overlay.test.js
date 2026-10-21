@@ -162,9 +162,9 @@ test("показ: длинная фраза идёт частями послед
   for (let step = 0; step < 10 && created.overlay.current(); step += 1) {
     const page = created.overlay.current();
     pages.push(page.text);
-    // Экран не больше 2 строк по 34 знака.
+    // Экран не больше 2 строк по 34 знака (+1 на «…» у оборванного экрана).
     assert.ok(page.lines.length <= 2);
-    for (const line of page.lines) assert.ok(SS.Text.codePoints(line).length <= 34);
+    for (const line of page.lines) assert.ok(SS.Text.codePoints(line).length <= 35);
     finishPage(created.clock, created.overlay);
   }
   const expected = SS.Text.pagesFor(words.join(" "), SS.Overlay.DEFAULT_ROOTS, {
