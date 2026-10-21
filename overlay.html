@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Субтитры Саши</title>
+<style>
+  :root { --font-size: 44px; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #stage {
+    position: fixed;
+    left: 50%;
+    bottom: 7vh;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: 92vw;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    will-change: opacity;
+  }
+
+  #stage.show { opacity: 1; }
+
+  #speaker {
+    display: inline-block;
+    margin-bottom: 0.2em;
+    font-size: calc(var(--font-size) * 0.48);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: 0.02em;
+    text-shadow: 0 0 6px rgba(0, 0, 0, 0.95), 0 2px 4px rgba(0, 0, 0, 0.9);
+  }
+
+  #line {
+    margin: 0;
+    font-size: var(--font-size);
+    font-weight: 700;
+    line-height: 1.22;
+    color: #ffffff;
+    white-space: pre-line;
+    overflow-wrap: break-word;
+    text-shadow:
+      0 0 6px rgba(0, 0, 0, 0.95),
+      0 0 16px rgba(0, 0, 0, 0.85),
+      0 2px 4px rgba(0, 0, 0, 0.95),
+      0 0 2px #000000;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="speaker"></div>
+  <div id="line"></div>
+</div>
+<script>
+  const CONFIG = __CONFIG_JSON__;
+
+  const POLL_MS = 500;
+  const FADE_MS = 350;
+  const GAP_MS = 120;
+  const FETCH_TIMEOUT_MS = 2000;
+  const MAX_QUEUE = 12;
+
+  const stage = document.getElementById('stage');
+  const speakerEl = document.getElementById('speaker');
+  const lineEl = document.getElementById('line');
+  const queue = [];
+  let after = null;
+  let showing = false;
+  let holdTimer = 0;
+  let fadeTimer = 0;
+
+  /** Применяет размер шрифта из настроек. */
+  function applyConfig() {
+    const size = Number(CONFIG.font_size) || 44;
+    document.documentElement.style.setProperty('--font-size', size + 'px');
+  }
+
+  /** Прячет субтитры и очищает очередь. */
+  function hideNow() {
+    clearTimeout(holdTimer);
+    clearTimeout(fadeTimer);
+    queue.length = 0;
+    showing = false;
+    stage.classList.remove('show');
+  }
+
+  /** Показывает следующую реплику из очереди. */
+  function showNext() {
+    if (showing || queue.length === 0) return;
+    const item = queue.shift();
+    showing = true;
+    speakerEl.textContent = item.name || '';
+    speakerEl.style.color = item.color || '#ffffff';
+    lineEl.textContent = item.text || '';
+    requestAnimationFrame(() => stage.classList.add('show'));
+
+    const hold = Math.max(600, (Number(item.seconds) || 2) * 1000);
+    holdTimer = setTimeout(() => {
+      stage.classList.remove('show');
+      fadeTimer = setTimeout(() => {
+        showing = false;
+        holdTimer = setTimeout(() => showNext(), GAP_MS);
+      }, FADE_MS);
+    }, hold);
+  }
+
+  /** Забирает новые реплики с сервера. */
+  async function poll() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const url = after === null ? '/lines' : '/lines?after=' + after;
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+      const data = await response.json();
+      // Сервер перезапустили: его нумерация началась заново, иначе оверлей замолчал бы.
+      if (after !== null && typeof data.last === 'number' && data.last < after) {
+        hideNow();
+        after = 0;
+      }
+      if (data.paused) {
+        hideNow();
+        if (typeof data.last === 'number') after = data.last;
+      } else {
+        if (data.lines && data.lines.length > 0) {
+          queue.push(...data.lines);
+          // Держим только свежие экраны, чтобы субтитры не отставали от речи.
+          if (queue.length > MAX_QUEUE) queue.splice(0, queue.length - MAX_QUEUE);
+          after = data.lines[data.lines.length - 1].n;
+        } else if (after === null && typeof data.last === 'number') {
+          after = data.last;
+        }
+        showNext();
+      }
+    } catch (error) {
+      // Сервер перезапускается или не ответил — просто пробуем снова на следующем тике.
+    } finally {
+      clearTimeout(timer);
+    }
+    setTimeout(poll, POLL_MS);
+  }
+
+  applyConfig();
+  poll();
+</script>
+</body>
+</html>
