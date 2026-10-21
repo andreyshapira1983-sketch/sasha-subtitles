@@ -9,16 +9,26 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 import logs_reader
+import obs_ws
 import text_tools
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 OVERLAY_PATH = os.path.join(BASE_DIR, "overlay.html")
 PAUSE_PATH = os.path.join(BASE_DIR, "PAUSE")
+JS_DIR = os.path.join(BASE_DIR, "js")  # overlay.html подключает js/*.js и в старом режиме.
+
+# Что можно раздавать рядом со страницей оверлея: только скрипты стилей.
+STATIC_TYPES = {
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+}
 
 HOST = "127.0.0.1"  # Слушаем только свой компьютер: снаружи сервер недоступен.
 POLL_SECONDS = 0.25
 LINE_LIMIT = 500
+OBS_RETRY_SECONDS = 2.0  # Пауза перед повторной попыткой связи с OBS.
+OBS_DEMO_SECONDS = 2.5  # Пауза между репликами в демо-режиме --obs.
 
 DEFAULT_CONFIG = {
     "said_log": "logs/said.jsonl",
@@ -37,6 +47,7 @@ DEFAULT_CONFIG = {
         "host": {"name": "Ведущий", "color": "#8fd8ff"},
     },
     "banned_words": ["блять", "хуй", "пизд", "ебал"],
+    "obs": {"host": "127.0.0.1", "port": 4455, "password": ""},
 }
 
 
@@ -49,6 +60,11 @@ def load_config():
     speakers = dict(DEFAULT_CONFIG["speakers"])
     speakers.update(config.get("speakers") or {})
     merged["speakers"] = speakers
+    obs = dict(DEFAULT_CONFIG["obs"])
+    raw_obs = config.get("obs")
+    if isinstance(raw_obs, dict):
+        obs.update(raw_obs)
+    merged["obs"] = obs
     return merged
 
 
@@ -71,6 +87,56 @@ def speaker_style(config, event):
     name = settings.get("name") or event.get("name") or speaker
     color = settings.get("color") or "#ffffff"
     return name, color
+
+
+def obs_settings(config):
+    """Достаёт и проверяет настройки OBS WebSocket из config.json.
+
+    Возвращает {"host": str, "port": int, "password": str}. При мусоре в
+    настройках поднимает ValueError с понятным русским текстом.
+    """
+    raw = (config or {}).get("obs") or {}
+    if not isinstance(raw, dict):
+        raise ValueError("В config.json раздел obs должен быть объектом { ... }.")
+    defaults = DEFAULT_CONFIG["obs"]
+    host = str(raw.get("host") or defaults["host"]).strip() or defaults["host"]
+    try:
+        port = int(raw.get("port", defaults["port"]))
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            "В config.json obs.port должен быть целым числом (например, 4455)."
+        ) from error
+    if not 1 <= port <= 65535:
+        raise ValueError("В config.json obs.port должен быть от 1 до 65535.")
+    password = raw.get("password", defaults["password"])
+    password = "" if password is None else str(password)
+    return {"host": host, "port": port, "password": password}
+
+
+def to_obs_payload(config, event):
+    """Собирает реплику для BroadcastCustomEvent: полный текст, final=True.
+
+    На экраны текст не режем — это сделает overlay.html. Пустой текст и
+    команды эмоций отсеиваются раньше (should_show); здесь только маскируем
+    мат и подставляем имя и цвет говорящего из настроек.
+    """
+    event = event if isinstance(event, dict) else {}
+    text = text_tools.mask_banned(
+        text_tools.normalize(event.get("text") or ""),
+        config.get("banned_words") or [],
+    )
+    speaker = event.get("speaker") or "host"
+    name, color = speaker_style(
+        config, {"speaker": speaker, "name": event.get("name")},
+    )
+    return {
+        "app": obs_ws.APP,
+        "speaker": str(speaker),
+        "name": name,
+        "color": color,
+        "text": text,
+        "final": True,
+    }
 
 
 def render_overlay(config):
@@ -208,6 +274,170 @@ def demo_events(config):
     return events
 
 
+class ObsRelay:
+    """Держит связь с OBS WebSocket и шлёт в него реплики.
+
+    При обрыве связь рвётся и восстанавливается при следующей реплике.
+    Повторные попытки не чаще retry_seconds, чтобы не забивать консоль.
+    client_factory и clock подменяются в тестах.
+    """
+
+    def __init__(self, config, client_factory=None, retry_seconds=OBS_RETRY_SECONDS,
+                 clock=time.monotonic):
+        self.config = config
+        self.settings = obs_settings(config)
+        self.client_factory = client_factory
+        self.retry_seconds = float(retry_seconds)
+        self.clock = clock
+        self.client = None
+        self._next_attempt = 0.0
+
+    @property
+    def url(self):
+        """Адрес OBS WebSocket для сообщений человеку."""
+        return f"ws://{self.settings['host']}:{self.settings['port']}"
+
+    def _make_client(self):
+        """Создаёт клиента OBS WebSocket (в тестах — поддельного)."""
+        if self.client_factory is not None:
+            return self.client_factory()
+        return obs_ws.ObsWebSocketClient(
+            host=self.settings["host"],
+            port=self.settings["port"],
+            password=self.settings["password"],
+        )
+
+    def _report_unavailable(self, error):
+        """Печатает понятную строку и подсказку, где включить WebSocket."""
+        print(f"OBS WebSocket недоступен: {error}")
+        print(f"Подсказка: {obs_ws.HINT_WS_OFF}")
+
+    def ensure_connected(self):
+        """Подключается, если связи нет. False — OBS пока недоступен."""
+        if self.client is not None and self.client.connected:
+            return True
+        self._drop()
+        now = self.clock()
+        if now < self._next_attempt:
+            return False
+        self._next_attempt = now + self.retry_seconds
+        client = None
+        try:
+            client = self._make_client()
+            client.connect()
+        except (obs_ws.ObsWebSocketError, OSError) as error:
+            if client is not None:
+                try:
+                    client.close()
+                except OSError:
+                    pass
+            self._report_unavailable(error)
+            return False
+        self.client = client
+        self._next_attempt = 0.0
+        print(f"OBS WebSocket: подключено ({self.url}). Реплики уходят в OBS.")
+        return True
+
+    def send(self, payload):
+        """Отправляет реплику. При обрыве возвращает False и готов к переподключению."""
+        if not self.ensure_connected():
+            return False
+        try:
+            self.client.send_custom_event(payload)
+            return True
+        except (obs_ws.ObsWebSocketError, OSError) as error:
+            print(f"Связь с OBS потеряна: {error}")
+            self._drop()
+            self._next_attempt = self.clock() + self.retry_seconds
+            return False
+
+    def _drop(self):
+        """Закрывает текущий клиент, не трогая настройки."""
+        if self.client is None:
+            return
+        client = self.client
+        self.client = None
+        try:
+            client.close()
+        except OSError:
+            pass
+
+    def close(self):
+        """Закрывает связь насовсем."""
+        self._drop()
+
+
+def publish_obs_event(config, relay, event):
+    """Фильтрует реплику (пауза, пусто, команда эмоции) и шлёт её в OBS."""
+    if is_paused():
+        return False
+    text = (event or {}).get("text") or ""
+    if not text_tools.should_show(text):
+        return False
+    return relay.send(to_obs_payload(config, event))
+
+
+def run_obs_logs(config, relay):
+    """Режим --obs: читает те же журналы и отправляет каждую фразу в OBS."""
+    readers = [
+        logs_reader.open_said_log(resolve_path(config["said_log"])),
+        logs_reader.open_hear_log(resolve_path(config["hear_log"])),
+    ]
+    while True:
+        try:
+            for reader in readers:
+                for event in reader.read_new():
+                    publish_obs_event(config, relay, event)
+        except Exception as error:  # Нить не должна молча умирать: субтитры пропадут.
+            print(f"Ошибка чтения журналов: {error}")
+        time.sleep(POLL_SECONDS)
+
+
+def run_obs_demo(config, relay):
+    """Режим --obs --demo: крутит образцы журналов по кругу."""
+    events = demo_events(config)
+    if not events:
+        print("Не удалось прочитать образцы журналов — показываю тестовую реплику.")
+        events = [{"speaker": "sasha", "text": "Проверка субтитров: раз, два, три."}]
+    print(f"Демо-режим --obs: {len(events)} реплик по кругу.")
+    index = 0
+    while True:
+        if is_paused():
+            time.sleep(POLL_SECONDS)
+            continue
+        event = events[index % len(events)]
+        index += 1
+        sent = publish_obs_event(config, relay, event)
+        time.sleep(OBS_DEMO_SECONDS if sent else POLL_SECONDS)
+
+
+def run_obs_mode(config, demo=False):
+    """Режим --obs: своя страница не поднимается, реплики идут в OBS WebSocket."""
+    try:
+        settings = obs_settings(config)
+    except ValueError as error:
+        print(error)
+        return 1
+    relay = ObsRelay(config)
+    print("Режим --obs: своя страница не поднимается, реплики уходят в OBS WebSocket.")
+    print(f"OBS WebSocket: ws://{settings['host']}:{settings['port']}")
+    print(f"Журнал Саши: {resolve_path(config['said_log'])}")
+    print(f"Журнал ушей: {resolve_path(config['hear_log'])}")
+    relay.ensure_connected()
+    print(f"Пауза: создайте файл PAUSE здесь — {PAUSE_PATH}")
+    print("Остановка: Ctrl+C.")
+    try:
+        if demo:
+            run_obs_demo(config, relay)
+        else:
+            run_obs_logs(config, relay)
+    except KeyboardInterrupt:
+        print("\nОстановлено.")
+    finally:
+        relay.close()
+    return 0
+
+
 class SubtitleServer(ThreadingHTTPServer):
     """HTTP-сервер, который знает настройки, страницу и хранилище реплик."""
 
@@ -244,10 +474,35 @@ class Handler(BaseHTTPRequestHandler):
             self._send_html(self.server.overlay)
         elif path == "/lines":
             self._send_lines()
+        elif path.startswith("/js/"):
+            # overlay.html подключает js/text.js, js/obs.js и js/overlay.js
+            # обычными <script src>: в старом режиме сервер обязан их отдать,
+            # иначе страница в OBS останется пустой.
+            self._send_static(path)
         elif path == "/favicon.ico":
             self._send_empty()
         else:
             self._send_text("Не найдено", 404)
+
+    def _send_static(self, path):
+        """Отдаёт скрипт из папки js — и ничего за её пределами."""
+        relative = path.lstrip("/")
+        candidate = os.path.normpath(os.path.join(BASE_DIR, relative))
+        # Только файлы прямо из js/: «..» и подпапки отсекаются.
+        if os.path.dirname(candidate) != JS_DIR:
+            self._send_text("Не найдено", 404)
+            return
+        content_type = STATIC_TYPES.get(os.path.splitext(candidate)[1].lower())
+        if not content_type:
+            self._send_text("Не найдено", 404)
+            return
+        try:
+            with open(candidate, "rb") as stream:
+                data = stream.read()
+        except OSError:
+            self._send_text("Не найдено", 404)
+            return
+        self._send_bytes(data, content_type)
 
     def _send_lines(self):
         """Отдаёт реплики новее номера из параметра after."""
@@ -307,12 +562,19 @@ def main(argv=None):
         action="store_true",
         help="показывать по кругу реплики из папки samples",
     )
+    parser.add_argument(
+        "--obs",
+        action="store_true",
+        help="не поднимать страницу, отправлять реплики в OBS WebSocket",
+    )
     args = parser.parse_args(argv)
     try:
         config = load_config()
     except (OSError, ValueError) as error:
         print(f"Не удалось прочитать config.json: {error}")
         return 1
+    if args.obs:
+        return run_obs_mode(config, demo=args.demo)
     try:
         port = int(config["port"])
     except (KeyError, TypeError, ValueError):

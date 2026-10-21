@@ -56,11 +56,26 @@ def is_emotion_command(text):
 
 
 def mask_banned(text, banned_words):
-    """Заменяет звёздочками слова с запретным корнем, оставляя знаки препинания."""
+    """Заменяет звёздочками слова с запретным корнем, оставляя знаки препинания.
+
+    Корень — подстрока слова («хуй» найдётся и в «нахуй»). Корень,
+    начинающийся с крыши «^», срабатывает только в начале слова:
+    «^бля» закроет «бля» и «бляха», но не тронет «рубля» и «оскорблять».
+    Такой же фильтр работает на страницах (js/text.js), чтобы Python-путь
+    и браузерный путь закрывали мат одинаково.
+    """
     if isinstance(banned_words, str):
         banned_words = [banned_words]
-    roots = [normalize(word).lower() for word in (banned_words or ())]
-    roots = [root for root in roots if root]
+    roots = []
+    for word in (banned_words or ()):
+        root = normalize(word).lower()
+        if not root:
+            continue
+        at_start = root.startswith("^")
+        if at_start:
+            root = root[1:]
+        if root:
+            roots.append((root, at_start))
     text = str(text)
     if not roots:
         return text
@@ -68,7 +83,11 @@ def mask_banned(text, banned_words):
     for part in re.split(r"(\w+)", text):
         if part and WORD_RE.fullmatch(part):
             low = part.lower()
-            if any(root in low for root in roots):
+            hit = any(
+                low.startswith(root) if at_start else root in low
+                for root, at_start in roots
+            )
+            if hit:
                 part = part[0] + "*" * (len(part) - 1)
         parts.append(part)
     return "".join(parts)

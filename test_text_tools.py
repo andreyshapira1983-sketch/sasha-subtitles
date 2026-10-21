@@ -92,6 +92,35 @@ class MaskBannedTest(unittest.TestCase):
         )
 
 
+class MaskRootsTest(unittest.TestCase):
+    """Корни с «^»: только начало слова, как в «Светлячках»."""
+
+    def test_caret_root_matches_word_start(self):
+        """Корень с «^» закрывает слова, которые с него начинаются."""
+        self.assertEqual(
+            text_tools.mask_banned("бляха и бля", ["^бля"]), "б**** и б**")
+
+    def test_caret_root_does_not_match_inside_word(self):
+        """Внутри слова корень с «^» не срабатывает."""
+        self.assertEqual(
+            text_tools.mask_banned("рубля, оскорблять", ["^бля"]),
+            "рубля, оскорблять",
+        )
+
+    def test_plain_root_still_matches_inside_word(self):
+        """Обычный корень без «^» по-прежнему ищется внутри слова."""
+        self.assertEqual(text_tools.mask_banned("рубля", ["бля"]), "р****")
+
+    def test_caret_with_empty_root_is_ignored(self):
+        """Одна крыша без корня ничего не закрывает."""
+        self.assertEqual(
+            text_tools.mask_banned("чистый текст", ["^"]), "чистый текст")
+
+    def test_caret_root_is_case_insensitive(self):
+        """Регистр корня с «^» не важен."""
+        self.assertEqual(text_tools.mask_banned("Бляха", ["^БЛЯ"]), "Б****")
+
+
 class DurationTest(unittest.TestCase):
     """Время показа реплики."""
 

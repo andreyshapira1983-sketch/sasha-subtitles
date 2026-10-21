@@ -18,6 +18,28 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  /* Подсказка, если страница открыта без настроек и без адреса OBS. */
+  #hint {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    box-sizing: border-box;
+    width: min(92vw, 960px);
+    padding: 24px 28px;
+    font-size: 26px;
+    line-height: 1.4;
+    text-align: center;
+    color: #ffffff;
+    background: rgba(0, 0, 0, 0.72);
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-radius: 14px;
+    text-shadow: 0 0 6px #000000, 0 2px 4px #000000;
+  }
+
+  #hint[hidden] { display: none; }
+
+  /* Сцена субтитров: плавно появляется и гаснет через CSS-переход. */
   #stage {
     position: fixed;
     left: 50%;
@@ -33,6 +55,10 @@
 
   #stage.show { opacity: 1; }
 
+  /* Промежуточный текст (final:false) бледнее готовой фразы. */
+  #stage.interim #speaker,
+  #stage.interim #line { opacity: 0.62; }
+
   #speaker {
     display: inline-block;
     margin-bottom: 0.2em;
@@ -40,7 +66,13 @@
     font-weight: 700;
     line-height: 1.1;
     letter-spacing: 0.02em;
-    text-shadow: 0 0 6px rgba(0, 0, 0, 0.95), 0 2px 4px rgba(0, 0, 0, 0.9);
+    color: #ffffff;
+    /* Чёрная обводка: имя видно и на белом, и на чёрном фоне. */
+    text-shadow:
+      0 0 6px rgba(0, 0, 0, 0.95),
+      0 0 16px rgba(0, 0, 0, 0.85),
+      0 2px 4px rgba(0, 0, 0, 0.95),
+      0 0 2px #000000;
   }
 
   #line {
@@ -51,6 +83,7 @@
     color: #ffffff;
     white-space: pre-line;
     overflow-wrap: break-word;
+    /* Чёрная обводка: видно на белом и на чёрном фоне. */
     text-shadow:
       0 0 6px rgba(0, 0, 0, 0.95),
       0 0 16px rgba(0, 0, 0, 0.85),
@@ -60,100 +93,37 @@
 </style>
 </head>
 <body>
+<div id="hint" hidden></div>
 <div id="stage">
   <div id="speaker"></div>
   <div id="line"></div>
 </div>
+<script src="js/text.js"></script>
+<script src="js/obs.js"></script>
+<script src="js/overlay.js"></script>
 <script>
-  const CONFIG = __CONFIG_JSON__;
-
-  const POLL_MS = 500;
-  const FADE_MS = 350;
-  const GAP_MS = 120;
-  const FETCH_TIMEOUT_MS = 2000;
-  const MAX_QUEUE = 12;
-
-  const stage = document.getElementById('stage');
-  const speakerEl = document.getElementById('speaker');
-  const lineEl = document.getElementById('line');
-  const queue = [];
-  let after = null;
-  let showing = false;
-  let holdTimer = 0;
-  let fadeTimer = 0;
-
-  /** Применяет размер шрифта из настроек. */
-  function applyConfig() {
-    const size = Number(CONFIG.font_size) || 44;
-    document.documentElement.style.setProperty('--font-size', size + 'px');
-  }
-
-  /** Прячет субтитры и очищает очередь. */
-  function hideNow() {
-    clearTimeout(holdTimer);
-    clearTimeout(fadeTimer);
-    queue.length = 0;
-    showing = false;
-    stage.classList.remove('show');
-  }
-
-  /** Показывает следующую реплику из очереди. */
-  function showNext() {
-    if (showing || queue.length === 0) return;
-    const item = queue.shift();
-    showing = true;
-    speakerEl.textContent = item.name || '';
-    speakerEl.style.color = item.color || '#ffffff';
-    lineEl.textContent = item.text || '';
-    requestAnimationFrame(() => stage.classList.add('show'));
-
-    const hold = Math.max(600, (Number(item.seconds) || 2) * 1000);
-    holdTimer = setTimeout(() => {
-      stage.classList.remove('show');
-      fadeTimer = setTimeout(() => {
-        showing = false;
-        holdTimer = setTimeout(() => showNext(), GAP_MS);
-      }, FADE_MS);
-    }, hold);
-  }
-
-  /** Забирает новые реплики с сервера. */
-  async function poll() {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  (function () {
+    "use strict";
+    // server.py подставляет сюда config.json вместо заглушки настроек.
+    // При открытии файла без сервера имени нет — это не ошибка, а режим
+    // настройки: ловим ReferenceError и показываем подсказку.
+    var config = null;
     try {
-      const url = after === null ? '/lines' : '/lines?after=' + after;
-      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
-      const data = await response.json();
-      // Сервер перезапустили: его нумерация началась заново, иначе оверлей замолчал бы.
-      if (after !== null && typeof data.last === 'number' && data.last < after) {
-        hideNow();
-        after = 0;
-      }
-      if (data.paused) {
-        hideNow();
-        if (typeof data.last === 'number') after = data.last;
-      } else {
-        if (data.lines && data.lines.length > 0) {
-          queue.push(...data.lines);
-          // Держим только свежие экраны, чтобы субтитры не отставали от речи.
-          if (queue.length > MAX_QUEUE) queue.splice(0, queue.length - MAX_QUEUE);
-          after = data.lines[data.lines.length - 1].n;
-        } else if (after === null && typeof data.last === 'number') {
-          after = data.last;
-        }
-        showNext();
-      }
+      config = __CONFIG_JSON__;
     } catch (error) {
-      // Сервер перезапускается или не ответил — просто пробуем снова на следующем тике.
-    } finally {
-      clearTimeout(timer);
+      config = null;
     }
-    setTimeout(poll, POLL_MS);
-  }
-
-  applyConfig();
-  poll();
+    window.__SASHA_CONFIG__ = config;
+    var parsed = SS.Overlay.parseLocation(window.location, config);
+    var overlay = SS.Overlay.createOverlay(document, window, {
+      mode: parsed.mode,
+      wsUrl: parsed.wsUrl,
+      password: parsed.password,
+      config: parsed.config
+    });
+    window.__SASHA_OVERLAY__ = overlay;
+    overlay.start();
+  })();
 </script>
 </body>
 </html>
